@@ -1,0 +1,463 @@
+---
+title: "TRGN -Capstone Project "
+author: "Zeyuan Dong"
+date: "11/19/2021"
+output: html_document
+---
+
+# Differences in gene expression before and after treatment in African American prostate cancer patients
+
+## Introduction
+- Mentor: Enrique I. Velazquez-Villarreal eivelazq@usc.edu
+- author: Zeyuan Dong zeyuando@usc.edu
+- Prostate cancer is one of the leading causes of cancer death in American men. Many studies now suggest that race plays a crucial role in prostate cancer.With the development of next-generation sequencing technology, RNA-Seq has become an important tool for transcriptome analysis and quantification. Rna-seq primarily helps researchers identify differences in gene expression. The RNA-Seq approach could help researchers gain insight into the development of prostate cancer and identify potential therapeutic targets. Data analysis was performed by Bioinductor in this study.
+- Biomarkers can guide clinical diagnosis and treatment decisions, so this study focused on investigating differences in gene expression before and after treatment in African American prostate cancer patients to look for potential biomarkers.
+-In the exploration results and visualization, the visualization results help me understand the sample information and structure more clearly. In many studies, heat maps are often an intuitive way to explore enumeration matrices. In DESeq2, two transformation methods are proposed. One is variance-stable transformation (VST) and the other is regular logarithmic transformation (Rlog). Since VST has a shorter running time than Rlog, I chose VST (FPKM) for all the colors in the heat map.
+- Different contrasts of sample type, Gleason number and treatment conditions were conducted to explore the expression patterns, visualized by heatmap.  Contrasting of pre-treatment and post-treatment between 34&36 and 35&36 controlling over sample types was finally chosen in this study, and top 200 gene list ranked by adjusted p-value were generated respectively. The shared genes of two lists were subsequently displayed by heatmap and analyzed by Ingenuity Pathway Analysis (IPA) and STRING（protein-protein interaction prediction）to obtain the candidate genes. After literature research, genes of interest, potential biomarkers in this case, were eventually selected and rationalized.
+- Reference：http://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+
+**Set the working path, install various required packages，preprocess the COUNTS file**
+
+```{r}
+library(stringr)
+library(Homo.sapiens)
+setwd("/Users/dongxiaotai/Desktop/TRGN_lab/final/")
+counts <- read.table("ProstCa_030921_2.txt")
+geneid <- rownames(counts) 
+gene <- str_match(geneid, "(\\w*).*")#Ready to remove the decimal point
+geneid <- gene[,2]#Let's get rid of the next two decimal points
+geneid2<-geneid#We're going to map the ENS name after the decimal point to the gene
+geneid2=data.frame(geneid2)#Convert to data.frame format
+counts<-cbind(counts,geneid2)#Merge counts and geneid2 to counts
+```
+
+**Convert geneid and get rid of duplicate genes**
+
+```{r}
+setwd("/Users/dongxiaotai/Desktop/TRGN_lab/final/")
+genes <- select(Homo.sapiens, keys=geneid,
+                columns=c("SYMBOL","TXCHROM"),
+                keytype="ENSEMBL")
+dim(genes)
+genes <- genes[!duplicated(genes$ENSEMBL),]
+counts<-counts[!duplicated(counts$geneid2),]
+row.names(counts)<-counts$geneid2
+```
+
+**Change CountsReady back to a more manageable matrix. Change the column names of the matrix, group and build a matrix that formally processes the data**
+
+```{r}
+library(GenomicAlignments)
+counts<-cbind(counts,genes$SYMBOL)
+counts_4<-na.omit(counts)
+counts_4<-counts_4[!duplicated(counts_4$`genes$SYMBOL`),]
+row.names(counts_4)<-counts_4$`genes$SYMBOL`
+counts_ready<-counts_4[,c(1,2,3,4,5,6)] #use counts_ready
+counts<-counts_ready
+```
+
+**By the end of this step, we have a clear counts and have removed the decimal point for ENS to correspond to the gene name. This matrix is now called counts_filtered.**
+
+**Build the complete matrix list，add sample information.I added the information before and after treatment and the Gleason score to the sample information. In "Counts" after reprocessing, 3 of the 6 data sets are C1 and the other 3 are T1. In ID, "C" stands for Control and "T" stands for Tumor.**
+
+```{r}
+counts_filtered<-counts[1:6] 
+coldata=data.frame(row.names=c("34C","35C","36C","34T","35T","36T"),
+                   Type=rep(c("Control","Tumor"),each=3),
+                   Gleason=rep(c("9","8","9"),2),
+                   Treatment=rep(c("Pre","Pre","Post"),2))
+
+```
+
+**Display the table**
+
+```{r}
+coldata
+coldata$Type<-factor(coldata$Type)
+coldata$Gleason<-factor(coldata$Gleason)
+coldata$Treatment<-factor(coldata$Treatment)
+
+```
+
+
+**Differential expression analysis**
+
+```{r}
+library(DESeq2)
+#if (!requireNamespace("BiocManager", quiet = TRUE))
+    #install.packages("BiocManager")
+#BiocManager::install("SummarizedExperiment")
+dds <- DESeqDataSetFromMatrix(countData = counts_filtered,
+                              colData = coldata,
+                              design = ~ Type )
+```
+
+
+**Pre-Filtering**
+**If this row adds up, if it adds up to a 10 you can keep it, because if you don't use a 0, you get rid of it. As long as one of these rows is not 0, then 0 is also information.**
+**Prefiltering has two important effects: we reduce the memory size of DDS data objects by removing rows that are rarely read; We have improved the speed of converting and testing functions in DESeq2. In this step, we perform minimum prefiltering to preserve only rows that have at least 10 reads.**
+
+```{r}
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+```
+
+```{r}
+dds <- DESeq(dds)
+res <- results(dds)
+```
+
+**TypeTreatment_Tumor_vs_Normal 34 35 36T vs 34 35 36C**
+
+```{r}
+ddsTN<-dds
+resTypeTrX_TN<-results(ddsTN,contrast=c("Type","Tumor","Control"),alpha=0.05)
+resTypeTrX_TN
+summary(resTypeTrX_TN)
+
+```
+
+**In "34 35 36T vs 34 35 36C", 37 up-regulated genes and 5 down-regulated genes were displayed under the condition of p-value<0.05.**
+
+```{r}
+resTypeTrX_TN_Ordered<-resTypeTrX_TN[order(resTypeTrX_TN$padj),]
+head(resTypeTrX_TN_Ordered)
+#Reorder the genes by the adjusted p value
+```
+
+
+```{r}
+set.seed(1)
+#if (!requireNamespace("BiocManager", quiet = TRUE))
+    #install.packages("BiocManager")
+#BiocManager::install("ComplexHeatmap")
+library(ComplexHeatmap)
+library("pheatmap")
+select_genes_resTypeTrX_TN_Ordered<-rownames(resTypeTrX_TN_Ordered)
+select_genes_resTypeTrX_TN_Ordered<-select_genes_resTypeTrX_TN_Ordered[1:42]
+write.csv(as.data.frame(resTypeTrX_TN_Ordered), 
+          file="/Users/dongxiaotai/Desktop/resTypeTrX_TN_Ordered.csv")
+write.csv(as.data.frame(resTypeTrX_TN_Ordered[select_genes_resTypeTrX_TN_Ordered,]), 
+          file="/Users/dongxiaotai/Desktop/select_genes_resTypeTrX_TN_Ordered.csv")
+vst_TypeTrX_TN<-vst(ddsTN,blind = FALSE)
+df_resTypeTrX_TN <- as.data.frame(colData(vst_TypeTrX_TN)["Type"])
+ComplexHeatmap::pheatmap(assay(vst_TypeTrX_TN)[select_genes_resTypeTrX_TN_Ordered,], cluster_rows=TRUE, show_rownames=TRUE,cluster_cols=TRUE, annotation_col=df_resTypeTrX_TN, fontsize=6.5, main = "34,35,36C vs 34,35,36T ",name="vst(FPKM)")
+```
+
+**As you can see from the heat map, the control sample and the tumor sample are clustered separately. In the control group, gene expression was very similar.**
+
+**Gleason8 vs Gleason9 （control CT）**
+
+```{R}
+ddsGleason89_ctlNT<-dds
+design(ddsGleason89_ctlNT)<-~Type + Gleason
+
+ddsGleason89_ctlNT<-DESeq(ddsGleason89_ctlNT)
+
+resultsNames(ddsGleason89_ctlNT)
+```
+
+```{r}
+resGleason89_ctlNT<-results(ddsGleason89_ctlNT,contrast=c("Gleason","9","8"),alpha=0.05)  
+resGleason89_ctlNT
+summary(resGleason89_ctlNT)
+```
+**In "Gleason8 vs Gleason9,Control CT", the results table showed 139 genes up-regulated and 194 down-regulated.**
+
+```{r}
+resGleason89_ctlNT_Ordered<-resGleason89_ctlNT[order(resGleason89_ctlNT$padj),]
+head(resGleason89_ctlNT_Ordered)
+```
+
+```{r}
+set.seed(88)
+library("pheatmap")
+select_genes_resGleason89_ctlNT_Ordered<-rownames(resGleason89_ctlNT_Ordered)
+select_genes_resGleason89_ctlNT_Ordered<-select_genes_resGleason89_ctlNT_Ordered[1:30]
+vst_Gleason89_ctlNT<-vst(ddsGleason89_ctlNT,blind = FALSE)
+df_resGleason89_ctlNT <- as.data.frame(colData(vst_Gleason89_ctlNT)[,c("Type","Gleason")])
+ComplexHeatmap::pheatmap(assay(vst_Gleason89_ctlNT)[select_genes_resGleason89_ctlNT_Ordered,], cluster_rows=TRUE, show_rownames=TRUE,
+         cluster_cols=TRUE, annotation_col=df_resGleason89_ctlNT,fontsize=8, main = "Gleason8 vs Gleason9,Control CT ",name="vst(FPKM)")
+```
+
+**In the heat map, Gleason8 and Gleason9 are clustered separately when we control for the effect of sample type. In Gleason9, 34C and 36C are clustered together, 34T and 36T are clustered together.**
+
+
+**Pre vs Post (Control CT)**
+```{R}
+ddsPrePost_ctlNT<-dds
+
+design(ddsPrePost_ctlNT)<-~Type + Treatment
+
+ddsPrePost_ctlNT<-DESeq(ddsPrePost_ctlNT)
+
+resultsNames(ddsPrePost_ctlNT)
+```
+
+```{r}
+resPrePost_ctlNT<-results(ddsPrePost_ctlNT, contrast=c("Treatment","Post","Pre"), alpha=0.05)    
+resPrePost_ctlNT
+summary(resPrePost_ctlNT)
+```
+
+**In the "Pre vs Post,Control CT", the results table showed 866 genes were up-regulated and 1545 genes were down-regulated.**
+
+```{r}
+resPrePost_ctlNT_Ordered<-resTypeTrX_TN[order(resPrePost_ctlNT$padj),]
+head(resPrePost_ctlNT_Ordered)
+```
+
+```{r}
+
+set.seed(88)
+select_genes_resPrePost_ctlNT_Ordered<-rownames(resPrePost_ctlNT_Ordered)
+select_genes_resPrePost_ctlNT_Ordered<-select_genes_resPrePost_ctlNT_Ordered[1:30]
+vst_PrePost_ctlNT<-vst(ddsPrePost_ctlNT,blind = FALSE)
+df_resPrePost_ctlNT <- as.data.frame(colData(vst_PrePost_ctlNT)[,c("Type","Treatment")])
+ComplexHeatmap::pheatmap(assay(vst_PrePost_ctlNT)[select_genes_resPrePost_ctlNT_Ordered,], cluster_rows=TRUE, show_rownames=TRUE,
+         cluster_cols=TRUE, annotation_col=df_resPrePost_ctlNT,fontsize=8, main = "Pre vs Post,Control CT",name="vst(FPKM)")
+
+```
+
+**In the heat map, the pre - and post-treatment samples were clustered separately when we controlled for the effect of sample type. Gene expression in tumor samples was significantly different before and after treatment.**
+
+**Three_Tumors_Only**
+
+```{r}
+counts_t<-counts[,c(4:6)]#counts_t——tumor only
+coldata_t<-coldata[c(4:6),]
+```
+
+```{r}
+#library(DESeq2)
+dds_t <- DESeqDataSetFromMatrix(countData = counts_t,
+                              colData = coldata_t,
+                              design = ~Treatment )
+```
+
+#Pre-Filtering
+
+```{r}
+keep <- rowSums(counts(dds_t)) >= 10
+dds_t <- dds_t[keep,]
+```
+#dds+res
+```{r}
+dds_t<-DESeq(dds_t)
+res_t<-results(dds_t, contrast=c("Treatment","Post","Pre"), alpha=0.05)
+summary(res_t)
+```
+
+**testing_heatmap_only tumor**
+
+```{r}
+res_t_Ordered<-res_t[order(res_t$padj),]
+head(res_t_Ordered)
+
+```
+
+```{r}
+set.seed(88)
+
+library("pheatmap")
+select_genes_res_t_Ordered<-rownames(res_t_Ordered)
+select_genes_res_t_Ordered<-select_genes_res_t_Ordered[1:30]
+vst_t<-vst(dds_t,blind = FALSE)
+df_res_t <- as.data.frame(colData(vst_t)["Treatment"])
+ComplexHeatmap::pheatmap(assay(vst_t)[select_genes_res_t_Ordered,], cluster_rows=TRUE, show_rownames=TRUE,
+         cluster_cols=TRUE, annotation_col=df_res_t, fontsize=8, main = "Tumors:Pre vs Post-Treatment",name="vst(FPKM)")
+```
+
+**Normal_Only**
+
+```{r}
+counts_n<-counts[,c(1:3)]
+coldata_n<-coldata[c(1:3),]
+```
+
+```{r}
+library(DESeq2)
+dds_n <- DESeqDataSetFromMatrix(countData = counts_n,
+                              colData = coldata_n,
+                              design = ~ Treatment )
+```
+
+#Pre-Filtering
+```{r}
+keep <- rowSums(counts(dds_n)) >= 10
+dds_n <- dds_n[keep,]
+```
+#dds+res
+```{r}
+dds_n<-DESeq(dds_n)
+#res_t<-lfcShrink(dds_t, )
+res_n<-results(dds_n, contrast=c("Treatment","Post","Pre"), alpha=0.05)
+
+summary(res_n)
+```
+
+#testing_heatmap_only normal
+
+```{r}
+res_n_Ordered<-res_n[order(res_n$padj),]
+head(res_n_Ordered)
+```
+
+```{r}
+#library("pheatmap")
+set.seed(3)
+library("pheatmap")
+select_genes_res_n_Ordered<-rownames(res_n_Ordered)
+select_genes_res_n_Ordered<-select_genes_res_n_Ordered[1:30]
+vst_n<-vst(dds_n,blind = FALSE)
+df_res_n <- as.data.frame(colData(vst_n)["Treatment"])
+ComplexHeatmap::pheatmap(assay(vst_n)[select_genes_res_n_Ordered,], cluster_rows=TRUE, show_rownames=TRUE,
+         cluster_cols=TRUE, annotation_col=df_res_n, fontsize=8, main = "Control:Pre vs Post-Treatment",name="vst(FPKM)")
+
+```
+
+**34vs36;Pre vs Post-,Control CT**
+
+**In this study, the focus is to explore the differential gene expression before and after treatment in prostate cancer patients. The patient-1(Pre-treatment: 34C, 34T; Post-treatment: 36C; 36T; Gleason-9) has received treatment, while patient-2(Pre-treatment: 35C, 35T; Gleason-8) has not received therapy yet. Therefore, 34CT&36CT contrasting pre-treatment and post-treatment differential gene expression(DGE) analysis was conducted to check the differential expression affected by the therapy. Additionally, 35CT&36CT contrasting pre- and post-treatment DGE analysis was also done because of the similarity between 34T and 35T, for comparison and supplement.**
+
+```{r}
+counts_3436_trx<-counts[,c(1,3,4,6)]
+coldata_3436_trx<-coldata[c(1,3,4,6),]
+```
+
+```{r}
+#library(DESeq2)
+dds_3436_trx <- DESeqDataSetFromMatrix(countData = counts_3436_trx,
+                              colData = coldata_3436_trx,
+                              design = ~ Type + Treatment )
+```
+
+#Pre-Filtering
+```{r}
+keep <- rowSums(counts(dds_3436_trx)) >= 10
+dds_3436_trx <- dds_3436_trx[keep,]
+```
+#dds+res
+```{r}
+dds_3436_trx<-DESeq(dds_3436_trx)
+res_3436_trx<-results(dds_3436_trx, contrast=c("Treatment","Post","Pre"), alpha=0.05)
+summary(res_3436_trx)
+```
+
+```{r}
+res_3436_trx_Ordered<-res_3436_trx[order(res_3436_trx$padj),]
+head(res_3436_trx_Ordered)
+```
+
+```{r}
+#library("pheatmap")
+set.seed(70)
+select_genes_res_3436_trx_Ordered<-rownames(res_3436_trx_Ordered)
+select_genes_res_3436_trx_Ordered<-select_genes_res_3436_trx_Ordered[1:30]
+vst_3436_trx<-vst(dds_3436_trx,blind = FALSE)
+df_res_3436_trx <- as.data.frame(colData(vst_3436_trx)["Treatment"])
+ComplexHeatmap::pheatmap(assay(vst_3436_trx)[select_genes_res_3436_trx_Ordered,], cluster_rows=TRUE, show_rownames=TRUE, cluster_cols=TRUE, annotation_col=df_res_3436_trx, fontsize=8, main = "34&36 contrasting Pre and Post-Treatment",name="vst(FPKM)")
+```
+
+**35vs36;Pre vs Post-,Control CT**
+
+```{r}
+counts_3536_trx<-counts[,c(2,3,5,6)]
+coldata_3536_trx<-coldata[c(2,3,5,6),]
+
+```
+
+```{r}
+#library(DESeq2)
+dds_3536_trx <- DESeqDataSetFromMatrix(countData = counts_3536_trx,
+                              colData = coldata_3536_trx,
+                              design = ~ Type + Treatment )
+```
+
+#Pre-Filtering
+
+```{r}
+keep <- rowSums(counts(dds_3536_trx)) >= 10
+dds_3536_trx <- dds_3536_trx[keep,]
+```
+#dds+res
+```{r}
+dds_3536_trx<-DESeq(dds_3536_trx)
+res_3536_trx<-results(dds_3536_trx, contrast=c("Treatment","Post","Pre"), alpha=0.05)
+summary(res_3536_trx)
+```
+
+```{r}
+res_3536_trx_Ordered<-res_3536_trx[order(res_3536_trx$padj),]
+head(res_3536_trx_Ordered)
+```
+
+```{r}
+set.seed(1)
+library(ComplexHeatmap)
+#library("pheatmap")
+select_genes_res_3536_trx_Ordered<-rownames(res_3536_trx_Ordered)
+select_genes_res_3536_trx_Ordered<-select_genes_res_3536_trx_Ordered[1:30]
+vst_3536_trx<-vst(dds_3536_trx,blind = FALSE)
+df_res_3536_trx <- as.data.frame(colData(vst_3536_trx)["Treatment"])
+ComplexHeatmap::pheatmap(assay(vst_3536_trx)[select_genes_res_3536_trx_Ordered,], cluster_rows=TRUE, show_rownames=TRUE,
+         cluster_cols=TRUE, annotation_col=df_res_3536_trx,fontsize=8, main = "35&36 contrasting Pre- and Post- Treatment",name="vst(FPKM)")
+```
+
+**Top200 genes of 34CT&36CT(contrasting pre- and post-treatment) and 35CT&36CT(contrasting pre- and post-treatment) by adjusted p-value were obtained respectively.**
+**Then, a list of 48 shared genes from those 2 Top200 genes was generated, and subsequently analyzed by Ingenuity Pathway Analysis (IPA).**
+**After testing, only 19 candidate genes were shared in the TOP100, and 48 candidate genes were shared in the TOP200. The maximum p-value of shared candidate genes in TOP200 was less than 10 to the power of minus 5, which was meaningful. Therefore, genes shared in TOP200 were selected and analyzed.**
+**After this step, I imported the selected 48 shared genes into IPA and performed simple path analysis for IPA. I submitted only genetic symbols without numbers/data/statistics. I exported the IPA results in Excel and selected the affected path that I was interested in.**
+**I made protein-protein interaction prediction through STRING.**
+
+```{r}
+#write.csv(as.data.frame(res_3436_trx_Ordered[1:100,]), 
+          #file="/Users/dongxiaotai/Desktop/res_3436_trx_Orderedtop100.csv")
+#write.csv(as.data.frame(res_3536_trx_Ordered[1:100,]), 
+          #file="/Users/dongxiaotai/Desktop/res_3536_trx_Orderedtop100.csv")
+
+
+```
+
+```{r}
+write.csv(as.data.frame(res_3436_trx_Ordered[1:200,]), 
+          file="/Users/dongxiaotai/Desktop/res_3436_trx_Orderedtop200.csv")
+write.csv(as.data.frame(res_3536_trx_Ordered[1:200,]), 
+          file="/Users/dongxiaotai/Desktop/res_3536_trx_Orderedtop200.csv")
+```
+
+```{r}
+setwd("/Users/dongxiaotai/Desktop/TRGN_lab/final/")
+library(readxl)
+shared_genes_343536top200_trx<-read_excel('/Users/dongxiaotai/Desktop/sharedgenetop200.xlsx',col_names = FALSE)
+
+shared_genes_343536top200_trx<-shared_genes_343536top200_trx[,1]
+shared_genes_343536top200_trx<-t(shared_genes_343536top200_trx)
+shared_genes_343536top200_trx<-shared_genes_343536top200_trx[1,]
+```
+```{r}
+dds_all_top200trx<-dds
+design(dds_all_top200trx)<-~ Type + Treatment
+dds_all_top200trx<-DESeq(dds_all_top200trx)
+res_all_top200trx<-results(dds_all_top200trx, contrast=c("Treatment","Post","Pre"),alpha=0.05)
+
+```
+
+```{r}
+set.seed(1)
+
+library(ComplexHeatmap)
+library("pheatmap")
+
+#select_genes_res_343536top200_trx_Ordered<-rownames(res_343536top200_trx_Ordered)
+#select_genes_res_343536top200_trx_Ordered<-select_genes_res_343536top200_trx_Ordered[1:30]
+vst_all_top200trx<-vst(dds_all_top200trx,blind = FALSE)
+df_res_all_top200trx <- as.data.frame(colData(vst_all_top200trx)["Treatment"])
+ComplexHeatmap::pheatmap(assay(vst_all_top200trx)[shared_genes_343536top200_trx,], cluster_rows=TRUE, show_rownames=TRUE,
+         cluster_cols=TRUE, annotation_col=df_res_all_top200trx,fontsize=6.5, main = "Top200 Shared Genes by 34vs36 & 35vs36 Pre/Post Treatments",display_numbers=TRUE,name ="vst(FPKM)")
+```
+
+
+```{r sessioninfo}
+sessionInfo()
+```
