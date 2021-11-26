@@ -13,7 +13,7 @@ Differential Gene Expression of African American with Prostate Cancer
 Enrique I. Velazquez-Villarreal  eivelazq@usc.edu
 3.   Proposed Written Portion：
 
-  (I) Traditional thesis, turned in as a PDF consisting of no-less than six pages written with 0.5" margins, Ariel 11 or Times New Roman 12, with sections of Abstract, Introduction, Methods, results, and discussion.
+  (I) Traditional thesis, turned in as a PDF consisting of no-less than six pages written with 0.5" margins, Ariel 11 or Times New Roman 12, with sections of  Introduction, Methods, results, and discussion.
 
   In the introduction, I'll talk a bit about what is Prostate Cancer? What is RNA-seq? What is looking for Rna-Seq?
 
@@ -25,10 +25,3 @@ Enrique I. Velazquez-Villarreal  eivelazq@usc.edu
 
   （II）I build Capstone's repository on Github and update my code. I will also generate Rmarkdown to clearly describe each step that is being done and what is observed.
 
-4.   Oral/Presentation Portion：
-
-  I will use Slides to prepare for 30-40 minutes of presentation and answer Mentor and program director questions.
-
-5.   Oral/Presentation Date Scheduled (Date/Time/Location/Venue).
-
-  I will advance to mentor and program director to make an appointment for the Presentation Date/Time/Location/Venue.
