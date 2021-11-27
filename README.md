@@ -20,7 +20,7 @@ Enrique I. Velazquez-Villarreal  eivelazq@usc.edu
 
 (4) Different contrasts of sample type, Gleason number and treatment conditions were conducted to explore the expression patterns, visualized by heatmap. Contrasting of pre-treatment and post-treatment between 34&36 and 35&36 controlling over sample types was finally chosen in this study, and top 200 gene list ranked by adjusted p-value were generated respectively. The shared genes of two lists were subsequently displayed by heatmap and analyzed by Ingenuity Pathway Analysis (IPA) and STRING（protein-protein interaction prediction）to obtain the candidate genes. After literature research, genes of interest, potential biomarkers in this case, were eventually selected and rationalized.
 
-(5)  I will show and explain my work and result for each step in R. I will analyze and discuss candidate genes in the discussion section of the paper.
+(5)  I show and explain my work and result for each step in R. I analyze and discuss candidate genes in the discussion section of the paper.
 
 
 
